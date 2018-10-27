@@ -7,17 +7,20 @@
 #define OLED_RESET 4
 Adafruit_SSD1306 display(OLED_RESET);
 
-int potPin = 0;    // select the input pin for the potentiometer
+int pinBPM = 0; // select the input pin for the potentiometer
+int pinSwing = 1;
 int pinBar = 6;
 int pinBeat = 9;
-int pin8th = 10;
-int pin16th = 11;
+int pinQuaver = 10;
+int pinSemi = 11;
 
-int setBar = 3;
+int setBar = 4;
 int setBeats = 4;
 int setWidth = 20;
 int setSwing = 0;
 
+float lastBPM = 0;
+float lastSwing = 0;
 
 const long minute = 60000;
 
@@ -30,8 +33,8 @@ void dim(void* context)
 {
   digitalWrite(pinBar, LOW);
   digitalWrite(pinBeat, LOW);
-  digitalWrite(pin8th, LOW);
-  digitalWrite(pin16th, LOW);
+  digitalWrite(pinQuaver, LOW);
+  digitalWrite(pinSemi, LOW);
 }
 
 // This function runs on every beat
@@ -41,6 +44,7 @@ void onBeat(void* context)
   if (currentBeat % (4 * setBar)  == 0)
   {
     digitalWrite(pinBar, HIGH);
+    currentBeat = 0;
   }
   if (currentBeat % 4 == 0)
   {
@@ -48,10 +52,28 @@ void onBeat(void* context)
   }
   if (currentBeat % 2 == 0)
   {
-    digitalWrite(pin8th, HIGH);
+    digitalWrite(pinQuaver, HIGH);
   }
+  
+  if (currentBeat % 2 == 0)
+  {
+    digitalWrite(pinSemi, HIGH);
 
-  digitalWrite(pin16th, HIGH);
+    // Rerun this code in a short while based on the current bpm
+    int interval = minute / (getBPM() * 4);
+    interval = interval + ((getSwing() * interval) / 200); // Apply swing
+    t.after(interval, onBeat, (void*)10);
+  }
+  else
+  {
+    
+    digitalWrite(pinSemi, HIGH);
+    
+    // Rerun this code in a short while based on the current bpm
+    int interval = minute / (getBPM() * 4);
+    interval = interval - ((getSwing() * interval) / 200); // Apply swing
+    t.after(interval, onBeat, (void*)10);
+  }
 
   // Update the counter that indicates which beat of the bar we're on
   currentBeat++;  
@@ -59,9 +81,7 @@ void onBeat(void* context)
   // Dim the LEDs again after 100ms
   t.after(setWidth, dim, (void*)10);
 
-  // Rerun this code in a short while based on the current bpm
-  int interval = minute / (getBPM() * 4);
-  t.after(interval, onBeat, (void*)10);
+
 }
 
 void setup() {
@@ -100,9 +120,7 @@ void loop() {
   display.setTextSize(3);
   display.setTextColor(WHITE);
 
-  int out;
-  out = getBPM();
-  display.println(out);
+  display.println(getBPM());
   
   display.setCursor(80,5);
   display.setTextSize(1);
@@ -117,7 +135,7 @@ void loop() {
   
   display.setCursor(80,25);
   display.setTextSize(1);
-  display.print(setSwing);
+  display.print(getSwing());
   display.println(" %");
   
   display.display();
@@ -126,7 +144,38 @@ void loop() {
 // Return a BPM based on the current value of the potentiometer
 int getBPM()
 {
-  int val = 0;       // variable to store the value coming from the sensor
-  val = analogRead(potPin);
-  return (val / 4) + 1;
+  int potReading = 0;       // variable to store the value coming from the sensor
+  int outValue = 0;
+  float newValue = 0;
+  float smoothingAmount = 0.1;
+  
+  potReading = analogRead(pinBPM);
+
+  newValue = (smoothingAmount * potReading) + ((1-smoothingAmount) * lastBPM);
+
+  lastBPM = newValue;
+
+  outValue = newValue;
+
+  return ( outValue / 4) + 1;
+}
+
+int getSwing()
+{
+  int potReading = 0;       // variable to store the value coming from the sensor
+  int outValue = 0;
+  float newValue = 0;
+  float smoothingAmount = 0.2;
+  
+  potReading = analogRead(pinSwing);
+
+  newValue = (smoothingAmount * potReading) + ((1-smoothingAmount) * lastSwing);
+
+  lastSwing = newValue;
+
+  newValue = (newValue / 1024) * 101; // As scale is 0 - 100 it needs to be divided by 101
+  
+  outValue = newValue;
+
+  return ( outValue );
 }
